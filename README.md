@@ -12,34 +12,35 @@ KindScaler comes to facilitate this task. After dissecting how KinD creates and 
 
 For example, adding 3 workers to cluster `kind`:
 
-```
+```sh
 $kind create cluster --config cluster.yaml
 Creating cluster "kind" ...
  ✓ Ensuring node image (kindest/node:v1.28.0) 🖼
- ✓ Preparing nodes 📦 📦 📦  
- ✓ Writing configuration 📜 
- ✓ Starting control-plane 🕹 
- ✓ Installing CNI 🔌 
- ✓ Installing StorageClass 💾 
- ✓ Joining worker nodes 🚜 
-Set kubectl context to "kind-kind"                                                                                                                          
-You can now use your cluster with:                                                                                                                          
-                                                                                                                                                            
-kubectl cluster-info --context kind-kind                                                                                                                    
-                                                                                                                                                            
-Not sure what to do next? 😅  Check out https://kind.sigs.k8s.io/docs/user/quick-start/                                                                     
-                                                                                                                                                            
-$kubectl get nodes                                                                                                   
+ ✓ Preparing nodes 📦 📦 📦
+ ✓ Writing configuration 📜
+ ✓ Starting control-plane 🕹
+ ✓ Installing CNI 🔌
+ ✓ Installing StorageClass 💾
+ ✓ Joining worker nodes 🚜
+Set kubectl context to "kind-kind"
+
+You can now use your cluster with:
+
+kubectl cluster-info --context kind-kind
+
+Not sure what to do next? 😅  Check out https://kind.sigs.k8s.io/docs/user/quick-start/
+
+$kubectl get nodes
 NAME                 STATUS   ROLES           AGE   VERSION
 kind-control-plane   Ready    control-plane   34s   v1.28.0
 kind-worker          Ready    <none>          13s   v1.28.0
 kind-worker2         Ready    <none>          8s    v1.28.0
-                                                                                                                                                            
+
 $./kindscaler.sh kind -r worker -c 3
 Adding kind-worker3 node to kind cluster... Done!
 Adding kind-worker4 node to kind cluster... Done!
 Adding kind-worker5 node to kind cluster... Done!
-                                                                                                                                                            
+
 $kubectl get nodes
 NAME                 STATUS   ROLES           AGE    VERSION
 kind-control-plane   Ready    control-plane   109s   v1.28.0
@@ -48,12 +49,11 @@ kind-worker2         Ready    <none>          83s    v1.28.0
 kind-worker3         Ready    <none>          49s    v1.28.0
 kind-worker4         Ready    <none>          36s    v1.28.0
 kind-worker5         Ready    <none>          7s     v1.28.0
-
 ```
 
 ## Deleting nodes
 
-```
+```sh
 kubectl delete node <nodename>
 docker stop <container>
 docker container rm <container>
