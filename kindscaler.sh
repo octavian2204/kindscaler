@@ -1,6 +1,21 @@
 #!/bin/bash
 set -euxo pipefail
 
+# Use coorect sed command
+if [[ "$(uname)" == "Darwin" ]]; then
+    SED=gsed
+    GREP=ggrep
+    if ! command -v $SED &> /dev/null; then
+        echo "gsed command not found, please install it to use this script. (Ex: brew install gsed)"
+    elif ! command -v $GREP &> /dev/null; then
+        echo "ggrep command not found, please install it to use this script. (Ex: brew install grep)"
+        exit 1
+    fi
+    else
+    SED=sed
+    GREP=ggrep
+fi
+
 # Check for required commands
 if ! command -v kind &> /dev/null; then
     echo "kind command not found, please install kind to use this script."
@@ -44,7 +59,7 @@ highest_index=0
 existing_nodes=$(kind get nodes --name "$CLUSTER_NAME")
 for node in $existing_nodes; do
     if [[ $node == "$CLUSTER_NAME-$ROLE"* ]]; then
-        suffix=$(echo $node | sed -e "s/^$CLUSTER_NAME-$ROLE//")
+        suffix=$(echo $node | $SED -e "s/^$CLUSTER_NAME-$ROLE//")
         if [[ "$suffix" =~ ^[0-9]+$ ]] && [ "$suffix" -gt "$highest_index" ]; then
             highest_index=$suffix
         fi
@@ -62,16 +77,16 @@ for i in $(seq $start_index $end_index); do
     docker cp $CONTAINER_NAME:/kind/kubeadm.conf kubeadm-$i.conf > /dev/null 2>&1
 
     # Replace the container role name with specific node name in the kubeadm file
-    sed -i "s/$CONTAINER_NAME$/$CONTAINER_NAME$i/g" "./kubeadm-$i.conf"
+    $SED -i "s/$CONTAINER_NAME$/$CONTAINER_NAME$i/g" "./kubeadm-$i.conf"
 
     # Update IP addresses
     # Assume the file contains parameters 'advertiseAddress' and 'node-ip' with typical IP values
     # Extract the IP address used, increment it, and replace it in the file
-    ORIGINAL_IP=$(grep -oP '(advertiseAddress|node-ip):\s*\K([0-9]{1,3}(\.[0-9]{1,3}){3})' "./kubeadm-$i.conf" | head -1)
-    IMAGE=$(docker ps | grep $CLUSTER_NAME | awk '{print $2}' | head -1)
+    ORIGINAL_IP=$($GREP -oP '(advertiseAddress|node-ip):\s*\K([0-9]{1,3}(\.[0-9]{1,3}){3})' "./kubeadm-$i.conf" | head -1)
+    IMAGE=$(docker ps | $GREP $CLUSTER_NAME | awk '{print $2}' | head -1)
     if [ "$ROLE" == "worker" ]; then
     # Command for worker nodes
-    	echo -n "Adding $CLUSTER_NAME-$ROLE$i node to $CLUSTER_NAME cluster... "
+        echo -n "Adding $CLUSTER_NAME-$ROLE$i node to $CLUSTER_NAME cluster... "
         docker run --name $CLUSTER_NAME-$ROLE$i --hostname $CLUSTER_NAME-$ROLE$i \
         --label io.x-k8s.kind.role=$ROLE --privileged \
         --security-opt seccomp=unconfined --security-opt apparmor=unconfined \
@@ -79,8 +94,8 @@ for i in $(seq $start_index $end_index); do
         --volume /lib/modules:/lib/modules:ro -e KIND_EXPERIMENTAL_CONTAINERD_SNAPSHOTTER \
         --detach --tty --label io.x-k8s.kind.cluster=$CLUSTER_NAME --net kind \
         --restart=on-failure:1 --init=false $IMAGE > /dev/null 2>&1
-        NEW_IP=$(docker inspect $CLUSTER_NAME-$ROLE$i | grep IPAddress | tail -1 | cut -d "\"" -f 4)
-        sed -i -r "s/$ORIGINAL_IP/$NEW_IP/g" "./kubeadm-$i.conf"
+        NEW_IP=$(docker inspect $CLUSTER_NAME-$ROLE$i | $GREP IPAddress | tail -1 | cut -d "\"" -f 4)
+        $SED -i -r "s/$ORIGINAL_IP/$NEW_IP/g" "./kubeadm-$i.conf"
         sleep 5
         docker cp kubeadm-$i.conf $CLUSTER_NAME-$ROLE$i:/kind/kubeadm.conf > /dev/null 2>&1
         docker exec --privileged $CLUSTER_NAME-$ROLE$i kubeadm join --config /kind/kubeadm.conf --skip-phases=preflight --v=6 > /dev/null 2>&1
@@ -88,7 +103,7 @@ for i in $(seq $start_index $end_index); do
         echo "Done!"
     elif [ "$ROLE" == "control-plane" ]; then
     # Generate a random port number between 36000 and 36999 for control-plane nodes
-        PORT=$(shuf -i 39000-39999 -n 1)   
+        PORT=$(shuf -i 39000-39999 -n 1)
     # Command for control-plane nodes
         echo -n "Adding $CLUSTER_NAME-$ROLE$i node to $CLUSTER_NAME cluster... "
         docker run --name $CLUSTER_NAME-$ROLE$i --hostname $CLUSTER_NAME-$ROLE$i \
@@ -98,8 +113,8 @@ for i in $(seq $start_index $end_index); do
         --volume /lib/modules:/lib/modules:ro -e KIND_EXPERIMENTAL_CONTAINERD_SNAPSHOTTER \
         --detach --tty --label io.x-k8s.kind.cluster=$CLUSTER_NAME --net kind \
         --restart=on-failure:1 --init=false $IMAGE > /dev/null 2>&1
-        NEW_IP=$(docker inspect $CLUSTER_NAME-$ROLE$i | grep IPAddress | tail -1 | cut -d "\"" -f 4)
-        sed -i -r "s/$ORIGINAL_IP/$NEW_IP/g" "./kubeadm-$i.conf"
+        NEW_IP=$(docker inspect $CLUSTER_NAME-$ROLE$i | $GREP IPAddress | tail -1 | cut -d "\"" -f 4)
+        $SED -i -r "s/$ORIGINAL_IP/$NEW_IP/g" "./kubeadm-$i.conf"
         sleep 10
         docker exec --privileged $CLUSTER_NAME-$ROLE$i mkdir /etc/kubernetes/pki/
         docker exec --privileged $CLUSTER_NAME-$ROLE$i mkdir /etc/kubernetes/pki/etcd
@@ -107,16 +122,16 @@ for i in $(seq $start_index $end_index); do
         mkdir .kindadd
         docker cp $CLUSTER_NAME-$ROLE:/etc/kubernetes/pki/ca.crt .kindadd/ca.crt
         docker cp .kindadd/ca.crt $CLUSTER_NAME-$ROLE$i:/etc/kubernetes/pki/ca.crt
-        
+
         docker cp $CLUSTER_NAME-$ROLE:/etc/kubernetes/pki/ca.key .kindadd/ca.key
         docker cp .kindadd/ca.key $CLUSTER_NAME-$ROLE$i:/etc/kubernetes/pki/ca.key
-        
+
         docker cp $CLUSTER_NAME-$ROLE:/etc/kubernetes/pki/front-proxy-ca.crt .kindadd/front-proxy-ca.crt
         docker cp .kindadd/front-proxy-ca.crt $CLUSTER_NAME-$ROLE$i:/etc/kubernetes/pki/front-proxy-ca.crt
-        
+
         docker cp $CLUSTER_NAME-$ROLE:/etc/kubernetes/pki/front-proxy-ca.key .kindadd/front-proxy-ca.key
         docker cp .kindadd/front-proxy-ca.key $CLUSTER_NAME-$ROLE$i:/etc/kubernetes/pki/front-proxy-ca.key
-        
+
         docker cp $CLUSTER_NAME-$ROLE:/etc/kubernetes/pki/sa.pub .kindadd/sa.pub
         docker cp .kindadd/sa.pub $CLUSTER_NAME-$ROLE$i:/etc/kubernetes/pki/sa.pub
 
@@ -125,7 +140,7 @@ for i in $(seq $start_index $end_index); do
         mkdir .kindadd/etcd
         docker cp $CLUSTER_NAME-$ROLE:/etc/kubernetes/pki/etcd/ca.crt .kindadd/etcd/ca.crt
         docker cp .kindadd/etcd/ca.crt $CLUSTER_NAME-$ROLE$i:/etc/kubernetes/pki/etcd/ca.crt
-        
+
         docker cp $CLUSTER_NAME-$ROLE:/etc/kubernetes/pki/etcd/ca.key .kindadd/etcd/ca.key
         docker cp .kindadd/etcd/ca.key $CLUSTER_NAME-$ROLE$i:/etc/kubernetes/pki/etcd/ca.key
         docker exec --privileged $CLUSTER_NAME-$ROLE$i kubeadm join --config /kind/kubeadm.conf --skip-phases=preflight --v=6 > /dev/null 2>&1
